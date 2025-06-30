@@ -5,6 +5,8 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableCellRenderer;
 import java.awt.*;
+import java.awt.event.ActionListener;
+
 import java.awt.event.ActionEvent;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -19,16 +21,25 @@ public class Employee extends JFrame {
 
     private String employeeUsername;
     private String employeeType;
-
+    private Thread requestUpdaterThread;
     // كونستركتور يستقبل اسم المستخدم
     public Employee(String username) {
         this.employeeUsername = username;
         setEmployeeType();
         initUI();
         loadRequests();
-        startAutoRefresh(); // خيط التحديث التلقائي
+        requestUpdaterThread = new Thread(new RequestUpdater(this));
+        requestUpdaterThread.start();
     }
 
+    @Override
+public void dispose() {
+    if (requestUpdaterThread != null && requestUpdaterThread.isAlive()) {
+        requestUpdaterThread.interrupt(); // إيقاف الخيط
+    }
+    super.dispose();
+}
+    
     private void setEmployeeType() {
         HashMap<String, String> userTypeMap = new HashMap<>();
         userTypeMap.put("user_electrical", "كهرباء");
@@ -134,9 +145,15 @@ public class Employee extends JFrame {
         }
     }
 
-    private void refreshRequests() {
-        loadRequests();
+   private synchronized void refreshRequests() {
+    // لا تحدّث الجدول إذا كان المستخدم يعدّل صفًا حاليًا
+    if (table.isEditing()) {
+        return;
     }
+
+    // استدعاء دالة تحميل الطلبات من قاعدة البيانات
+    loadRequests();
+}
 
     private void startAutoRefresh() {
         new Thread(() -> {
@@ -258,6 +275,26 @@ public class Employee extends JFrame {
             super.fireEditingStopped();
         }
     }
+    class RequestUpdater implements Runnable {
+    private Employee employee;
+
+    public RequestUpdater(Employee employee) {
+        this.employee = employee;
+    }
+
+    @Override
+    public void run() {
+        while (true) {
+            try {
+                Thread.sleep(30000); // انتظار 30 ثانية
+                SwingUtilities.invokeLater(() -> employee.refreshRequests());
+            } catch (InterruptedException e) {
+                System.out.println("تم إيقاف خيط التحديث.");
+                break;
+            }
+        }
+    }
+}
 
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> new Login().setVisible(true));
